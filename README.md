@@ -15,7 +15,7 @@ Requirements:
   and designate the boundaries of the code that should have exclusive access to the entity (called “protected code”)
 - [x] For any given entity, EntityLocker should guarantee that at most one thread executes protected code on that entity.
   If there’s a concurrent request to lock the same entity, the other thread should wait until the entity becomes available.
-- [ ] EntityLocker should allow concurrent execution of protected code on different entities.
+- [x] EntityLocker should allow concurrent execution of protected code on different entities.
 
 <p>
 Bonus requirements (optional):

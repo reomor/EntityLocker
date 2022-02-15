@@ -18,7 +18,7 @@ public interface EntityLocker<ID> {
    * @param entityId entity identifier
    * @return result of locking
    */
-  boolean lock(ID entityId) throws InterruptedException;
+  boolean lock(ID entityId, Class<?> clazz) throws InterruptedException;
 
   /**
    * Unlock entity with certain id
@@ -26,5 +26,5 @@ public interface EntityLocker<ID> {
    * @param entityId entity identifier
    * @throws IllegalMonitorStateException if non-owner tries to unlock
    */
-  void unlock(ID entityId);
+  void unlock(ID entityId, Class<?> clazz);
 }

@@ -21,16 +21,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class EntityLockerTest {
 
   private static final String TEST_ID = "TEST_ID";
+  private static final Object TEST_ENTITY = new Object();
+  private static final Class<?> TEST_ENTITY_CLASS = TEST_ENTITY.getClass();
 
   @Test
   void lockUnlock() throws InterruptedException {
 
     EntityLocker<String> entityLocker = new EntityLockerImpl<>();
 
-    boolean lockResult = entityLocker.lock(TEST_ID);
+    boolean lockResult = entityLocker.lock(TEST_ID, TEST_ENTITY_CLASS);
     assertTrue(lockResult);
 
-    entityLocker.unlock(TEST_ID);
+    entityLocker.unlock(TEST_ID, TEST_ENTITY_CLASS);
   }
 
   @Timeout(value = 3)
@@ -56,9 +58,9 @@ class EntityLockerTest {
         }
 
         try {
-          boolean lockResult = entityLocker.lock(TEST_ID);
+          boolean lockResult = entityLocker.lock(TEST_ID, TEST_ENTITY_CLASS);
           assertTrue(lockResult);
-          entityLocker.unlock(TEST_ID);
+          entityLocker.unlock(TEST_ID, TEST_ENTITY_CLASS);
         } catch (InterruptedException e) {
           errors.incrementAndGet();
         }
@@ -81,7 +83,9 @@ class EntityLockerTest {
   void lockOneAfterAnother() throws InterruptedException {
 
     Entity<String> entity = new Entity<>(TEST_ID, 0);
+    Class<?> entityClass = entity.getClass();
     int expectedValue = 2;
+
     EntityLocker<String> entityLocker = new EntityLockerImpl<>();
     AtomicInteger errors = new AtomicInteger(0);
 
@@ -91,13 +95,13 @@ class EntityLockerTest {
     // first thread always takes lock first
     Thread thread1 = new Thread(() -> {
       try {
-        boolean lockResult = entityLocker.lock(entity.getEntityId());
+        boolean lockResult = entityLocker.lock(entity.getEntityId(), entityClass);
         assertTrue(lockResult);
 
         thread2StartLatch.countDown();
 
         entity.setValue(expectedValue - 1);
-        entityLocker.unlock(entity.getEntityId());
+        entityLocker.unlock(entity.getEntityId(), entityClass);
 
         completeLatch.countDown();
       } catch (InterruptedException e) {
@@ -109,11 +113,11 @@ class EntityLockerTest {
       try {
         thread2StartLatch.await();
 
-        boolean lockResult = entityLocker.lock(entity.getEntityId());
+        boolean lockResult = entityLocker.lock(entity.getEntityId(), entityClass);
         assertTrue(lockResult);
 
         entity.setValue(expectedValue);
-        entityLocker.unlock(entity.getEntityId());
+        entityLocker.unlock(entity.getEntityId(), entityClass);
 
         completeLatch.countDown();
       } catch (InterruptedException e) {
@@ -143,7 +147,7 @@ class EntityLockerTest {
     // first thread always takes lock first
     Thread thread1 = new Thread(() -> {
       try {
-        boolean lockResult = entityLocker.lock(TEST_ID);
+        boolean lockResult = entityLocker.lock(TEST_ID, TEST_ENTITY_CLASS);
         assertTrue(lockResult);
 
         thread2StartLatch.countDown();
@@ -159,7 +163,7 @@ class EntityLockerTest {
         thread2StartLatch.await();
 
         try {
-          entityLocker.unlock(TEST_ID);
+          entityLocker.unlock(TEST_ID, TEST_ENTITY_CLASS);
         } catch (IllegalMonitorStateException e) {
           errors.incrementAndGet();
         }
@@ -185,10 +189,10 @@ class EntityLockerTest {
     EntityLocker<String> entityLocker = new EntityLockerImpl<>();
 
     for (int i = 0; i < attempts; i++) {
-      assertTrue(entityLocker.lock(TEST_ID));
+      assertTrue(entityLocker.lock(TEST_ID, TEST_ENTITY_CLASS));
     }
 
-    entityLocker.unlock(TEST_ID);
+    entityLocker.unlock(TEST_ID, TEST_ENTITY_CLASS);
   }
 
   @Data
