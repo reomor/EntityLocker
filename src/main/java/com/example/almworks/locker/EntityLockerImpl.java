@@ -16,10 +16,9 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
   @Override
   public boolean lock(ID entityId) throws InterruptedException {
 
-    Objects.requireNonNull(entityId, "entity identifier could not be null");
+    checkId(entityId);
 
     ReentrantLock currentLock = getOrCreateLock(entityId);
-
     currentLock.lockInterruptibly();
 
     return true;
@@ -28,7 +27,7 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
   @Override
   public void unlock(ID entityId) {
 
-    Objects.requireNonNull(entityId, "entity identifier could not be null");
+    checkId(entityId);
 
     ReentrantLock currentLock = getCurrentLock(entityId);
 
@@ -38,6 +37,10 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
       // current thread is not the owner and IllegalArgumentException is raised
       currentLock.unlock();
     }
+  }
+
+  private void checkId(ID entityId) {
+    Objects.requireNonNull(entityId, "entity identifier could not be null");
   }
 
   private ReentrantLock getCurrentLock(ID entityId) {
