@@ -10,18 +10,18 @@ EntityLocker itself does not deal with the entities, only with the IDs (primary 
 <p>
 Requirements:
 
-- [x] EntityLocker should support different types of entity IDs
-- [x] EntityLocker’s interface should allow the caller to specify which entity does it want to work with (using entity ID),
+- [x] `task-01` EntityLocker should support different types of entity IDs
+- [x] `task-02` EntityLocker’s interface should allow the caller to specify which entity does it want to work with (using entity ID),
   and designate the boundaries of the code that should have exclusive access to the entity (called “protected code”)
-- [x] For any given entity, EntityLocker should guarantee that at most one thread executes protected code on that entity.
+- [x] `task-03` For any given entity, EntityLocker should guarantee that at most one thread executes protected code on that entity.
   If there’s a concurrent request to lock the same entity, the other thread should wait until the entity becomes available.
-- [x] EntityLocker should allow concurrent execution of protected code on different entities.
+- [x] `task-04` EntityLocker should allow concurrent execution of protected code on different entities.
 
 <p>
 Bonus requirements (optional):
 
-- [x] Allow reentrant locking
-- [ ] Allow the caller to specify timeout for locking an entity 
-- [ ] Implement protection from deadlocks (but not taking into account possible locks outside EntityLocker)
-- [ ] Implement global lock. Protected code that executes under a global lock must not execute concurrently with any other protected code
-- [ ] Implement lock escalation. If a single thread has locked too many entities, escalate its lock to be a global lock. 
+- [x] `task-05` Allow reentrant locking
+- [x] `task-06` Allow the caller to specify timeout for locking an entity
+- [ ] `task-07` Implement protection from deadlocks (but not taking into account possible locks outside EntityLocker)
+- [ ] `task-08` Implement global lock. Protected code that executes under a global lock must not execute concurrently with any other protected code
+- [ ] `task-09` Implement lock escalation. If a single thread has locked too many entities, escalate its lock to be a global lock. 

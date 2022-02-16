@@ -12,10 +12,10 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 @Slf4j
 class EntityLockerTest {
@@ -183,7 +183,7 @@ class EntityLockerTest {
   }
 
   @ParameterizedTest
-  @ValueSource(ints = {5})
+  @ValueSource(ints = {2, 5})
   void reentrancyTest(int attempts) throws InterruptedException {
 
     EntityLocker<String> entityLocker = new EntityLockerImpl<>();
@@ -193,6 +193,61 @@ class EntityLockerTest {
     }
 
     entityLocker.unlock(TEST_ID, TEST_ENTITY_CLASS);
+  }
+
+  @Test
+  @Timeout(value = 3)
+  void timeoutLockReentrancy() throws InterruptedException {
+
+    EntityLocker<String> entityLocker = new EntityLockerImpl<>();
+
+    boolean lockResult = entityLocker.lock(TEST_ID, TEST_ENTITY_CLASS);
+    assertTrue(lockResult);
+
+    boolean timeoutLockResult = entityLocker.lock(TEST_ID, TEST_ENTITY_CLASS, 1, TimeUnit.SECONDS);
+    assertTrue(timeoutLockResult);
+  }
+
+  @Test
+  @Timeout(value = 3)
+  void timeoutLock() throws InterruptedException {
+
+    EntityLocker<String> entityLocker = new EntityLockerImpl<>();
+
+    CountDownLatch thread2StartLatch = new CountDownLatch(1);
+    CountDownLatch completeLatch = new CountDownLatch(2);
+
+    // first thread always takes lock first
+    Thread thread1 = new Thread(() -> {
+      try {
+        boolean lockResult = entityLocker.lock(TEST_ID, TEST_ENTITY_CLASS);
+        assertTrue(lockResult);
+
+        thread2StartLatch.countDown();
+
+        completeLatch.countDown();
+      } catch (InterruptedException ignore) {
+        /* NOP */
+      }
+    });
+
+    Thread thread2 = new Thread(() -> {
+      try {
+        thread2StartLatch.await();
+
+        boolean lockResult = entityLocker.lock(TEST_ID, TEST_ENTITY_CLASS, 1, TimeUnit.SECONDS);
+        assertFalse(lockResult);
+
+        completeLatch.countDown();
+      } catch (InterruptedException ignore) {
+        /* NOP */
+      }
+    });
+
+    thread1.start();
+    thread2.start();
+
+    completeLatch.await();
   }
 
   @Data

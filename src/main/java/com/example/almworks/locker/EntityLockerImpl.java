@@ -1,14 +1,16 @@
 package com.example.almworks.locker;
 
+import lombok.NonNull;
+
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class EntityLockerImpl<ID> implements EntityLocker<ID> {
 
   private final Object innerLock;
-  private final Map<Class, Map<ID, ReentrantLock>> entitiesLockMaps;
+  private final Map<Class<?>, Map<ID, ReentrantLock>> entitiesLockMaps;
 
   public EntityLockerImpl() {
     this.innerLock = new Object();
@@ -16,20 +18,29 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
   }
 
   @Override
-  public boolean lock(ID entityId, Class<?> clazz) throws InterruptedException {
-
-    checkId(entityId);
+  public boolean lock(@NonNull ID entityId, Class<?> clazz) throws InterruptedException {
 
     ReentrantLock currentLock = getOrCreateLock(entityId, clazz);
+
     currentLock.lockInterruptibly();
 
     return true;
   }
 
   @Override
-  public void unlock(ID entityId, Class<?> clazz) {
+  public boolean lock(ID entityId, Class<?> clazz, long timeout, TimeUnit timeUnit) throws InterruptedException {
 
-    checkId(entityId);
+    ReentrantLock currentLock = getOrCreateLock(entityId, clazz);
+
+    if (!currentLock.tryLock(timeout, timeUnit)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  @Override
+  public void unlock(@NonNull ID entityId, Class<?> clazz) {
 
     ReentrantLock currentLock = getCurrentLock(entityId, clazz);
 
@@ -39,10 +50,6 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
       // current thread is not the owner and IllegalArgumentException is raised
       currentLock.unlock();
     }
-  }
-
-  private void checkId(ID entityId) {
-    Objects.requireNonNull(entityId, "entity identifier could not be null");
   }
 
   private ReentrantLock getCurrentLock(ID entityId, Class<?> clazz) {

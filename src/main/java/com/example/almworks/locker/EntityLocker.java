@@ -1,5 +1,7 @@
 package com.example.almworks.locker;
 
+import java.util.concurrent.TimeUnit;
+
 /**
  * The task is to create a reusable utility class that provides synchronization mechanism similar to row-level DB locking.
  * <p>
@@ -16,9 +18,23 @@ public interface EntityLocker<ID> {
    * Lock entity with certain id
    *
    * @param entityId entity identifier
+   * @param clazz    entity type
    * @return result of locking
+   * @throws InterruptedException thread with lock have been interrupted
    */
   boolean lock(ID entityId, Class<?> clazz) throws InterruptedException;
+
+  /**
+   * Attempt to lock entity
+   *
+   * @param entityId entity identifier
+   * @param clazz    entity type
+   * @param timeout  timeout amount
+   * @param timeUnit timeout unit
+   * @return result of locking
+   * @throws InterruptedException thread with lock have been interrupted
+   */
+  boolean lock(ID entityId, Class<?> clazz, long timeout, TimeUnit timeUnit) throws InterruptedException;
 
   /**
    * Unlock entity with certain id
