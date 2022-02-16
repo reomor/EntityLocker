@@ -15,6 +15,18 @@ import java.util.concurrent.TimeUnit;
 public interface EntityLocker<ID> {
 
   /**
+   * Attempt to get global lock
+   * @return result of locking
+   * @throws InterruptedException
+   */
+  boolean globalLock() throws InterruptedException;
+
+  /**
+   * release global lock
+   */
+  void globalUnlock();
+
+  /**
    * Lock entity with certain id
    *
    * @param entityId entity identifier
