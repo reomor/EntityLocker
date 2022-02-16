@@ -17,7 +17,7 @@ public interface EntityLocker<ID> {
   /**
    * Attempt to get global lock
    * @return result of locking
-   * @throws InterruptedException
+   * @throws InterruptedException thread with lock have been interrupted
    */
   boolean globalLock() throws InterruptedException;
 
