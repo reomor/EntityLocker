@@ -8,33 +8,33 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class EntityLockerImpl<ID> implements EntityLocker<ID> {
 
-  private static final long NO_TIMEOUT_SIGN = Long.MIN_VALUE;
-
-  // it's better to lock on definite object, than 'this' instance
-  private final Object innerLock;
   private final ReentrantLock globalLock;
+  private final Condition globalLockCondition;
   private final Map<Class<?>, Map<ID, ReentrantLock>> entitiesLockMaps;
   private final AtomicInteger numberOfLockedObjects = new AtomicInteger(0);
 
   public EntityLockerImpl() {
-    this.innerLock = new Object();
     this.globalLock = new ReentrantLock();
+    this.globalLockCondition = globalLock.newCondition();
     this.entitiesLockMaps = new HashMap<>();
   }
 
   @Override
   public boolean globalLock() throws InterruptedException {
 
-    // then it's not possible to get global lock
-    if (numberOfLockedObjects.get() != 0) {
-      return false;
-    }
-
+    // block everything
     globalLock.lockInterruptibly();
+
+    // then it's not possible to get global lock
+    while (numberOfLockedObjects.get() != 0) {
+      // release until no other thread lock
+      globalLockCondition.await();
+    }
 
     return true;
   }
@@ -46,41 +46,46 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
 
   @Override
   public boolean lock(@NonNull ID entityId, Class<?> clazz) throws InterruptedException {
-    // from that moment copying the code doesn't worth it
-    return lock(entityId, clazz, NO_TIMEOUT_SIGN, TimeUnit.NANOSECONDS);
+
+    globalLock.lock();
+
+    try {
+      ReentrantLock entityLock = getOrCreateLock(entityId, clazz);
+
+      entityLock.lockInterruptibly();
+
+      postLockActions();
+      return true;
+    } finally {
+      globalLock.unlock();
+    }
   }
 
   @Override
   public boolean lock(ID entityId, Class<?> clazz, long timeout, TimeUnit timeUnit) throws InterruptedException {
 
-    ReentrantLock currentLock = getCurrentLock(entityId, clazz);
+    long startTimeInBaseUnit = timeUnit.convert(System.currentTimeMillis(), TimeUnit.MILLISECONDS);
 
-    synchronized (innerLock) {
-      // no way to get a new lock when globally locked
-      if (globalLock.isLocked() && currentLock == null) {
-        return false;
-      } else if (globalLock.isLocked() && currentLock != null) {
-
-        // allow possible reentrancy for owner
-        // no way to reuse free lock
-        if (!currentLock.isHeldByCurrentThread() || !currentLock.isLocked()) {
-          return false;
-        }
-      }
+    if (!globalLock.tryLock(timeout, timeUnit)) {
+      return false;
     }
 
-    ReentrantLock entityLock = getOrCreateLock(entityId, clazz);
+    // under global lock
+    try {
+      ReentrantLock entityLock = getOrCreateLock(entityId, clazz);
 
-    if (timeout == NO_TIMEOUT_SIGN) {
-      entityLock.lockInterruptibly();
-    } else {
-      if (!entityLock.tryLock(timeout, timeUnit)) {
+      long endTimeInBaseUnit = timeUnit.convert(System.currentTimeMillis(), TimeUnit.MILLISECONDS);
+      long lastTimeout = startTimeInBaseUnit + timeout - endTimeInBaseUnit;
+
+      if (!entityLock.tryLock(lastTimeout, timeUnit)) {
         return false;
       }
-    }
 
-    postLockActions();
-    return true;
+      postLockActions();
+      return true;
+    } finally {
+      globalLock.unlock();
+    }
   }
 
   @Override
@@ -105,25 +110,26 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
 
   @ThreadSafeIMHO
   private void postUnlockActions() {
-    numberOfLockedObjects.decrementAndGet();
+    globalLock.lock();
+    try {
+      numberOfLockedObjects.decrementAndGet();
+      globalLockCondition.signalAll();
+    } finally {
+      globalLock.unlock();
+    }
   }
 
-  @ThreadSafeIMHO
   private @Nullable ReentrantLock getCurrentLock(ID entityId, Class<?> clazz) {
-    synchronized (innerLock) {
-      var entityLockMap = entitiesLockMaps.getOrDefault(clazz, Map.of());
-      return entityLockMap.get(entityId);
-    }
+    var entityLockMap = entitiesLockMaps.getOrDefault(clazz, Map.of());
+    return entityLockMap.get(entityId);
+  }
+
+  private @NotNull ReentrantLock getOrCreateLock(ID entityId, Class<?> clazz) {
+    Map<ID, ReentrantLock> entityLockMap = entitiesLockMaps.computeIfAbsent(clazz, ignore -> new HashMap<>());
+    return entityLockMap.computeIfAbsent(entityId, ignore -> new ReentrantLock());
   }
 
   @ThreadSafeIMHO
-  private @NotNull ReentrantLock getOrCreateLock(ID entityId, Class<?> clazz) {
-    synchronized (innerLock) {
-      Map<ID, ReentrantLock> entityLockMap = entitiesLockMaps.computeIfAbsent(clazz, ignore -> new HashMap<>());
-      return entityLockMap.computeIfAbsent(entityId, ignore -> new ReentrantLock());
-    }
-  }
-
   protected int getNumberOfLockerObject() {
     return numberOfLockedObjects.get();
   }

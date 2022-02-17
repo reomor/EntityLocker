@@ -35,7 +35,6 @@ class EntityLockerTest {
     entityLocker.unlock(TEST_ID, TEST_ENTITY_CLASS);
   }
 
-//  @Test
   @Timeout(value = 3)
   @RepeatedTest(50)
   void lockUnlockMultiThreaded() throws InterruptedException {
@@ -255,7 +254,7 @@ class EntityLockerTest {
 
   @Test
   @Timeout(value = 3)
-  void whenGlobalLock_failLockAttempt() throws InterruptedException {
+  void whenGlobalLock_successLockAttempt_afterGlobalUnlock() throws InterruptedException {
 
     EntityLocker<String> entityLocker = new EntityLockerImpl<>();
 
@@ -270,6 +269,8 @@ class EntityLockerTest {
 
         thread2StartLatch.countDown();
 
+        entityLocker.globalUnlock();
+
         completeLatch.countDown();
       } catch (InterruptedException ignore) {
         /* NOP */
@@ -282,7 +283,7 @@ class EntityLockerTest {
         thread2StartLatch.await();
 
         boolean lockResult = entityLocker.lock(TEST_ID, TEST_ENTITY_CLASS);
-        assertFalse(lockResult);
+        assertTrue(lockResult);
 
         completeLatch.countDown();
       } catch (InterruptedException ignore) {
@@ -341,7 +342,7 @@ class EntityLockerTest {
 
   @Test
   @Timeout(value = 3)
-  void whenLock_failGlobalLockAttempt() throws InterruptedException {
+  void whenLock_successGlobalLockAttempt_afterUnlock() throws InterruptedException {
 
     EntityLocker<String> entityLocker = new EntityLockerImpl<>();
 
@@ -356,6 +357,8 @@ class EntityLockerTest {
 
         thread2StartLatch.countDown();
 
+        entityLocker.unlock(TEST_ID, TEST_ENTITY_CLASS);
+
         completeLatch.countDown();
       } catch (InterruptedException ignore) {
         /* NOP */
@@ -368,7 +371,7 @@ class EntityLockerTest {
         thread2StartLatch.await();
 
         boolean lockResult = entityLocker.globalLock();
-        assertFalse(lockResult);
+        assertTrue(lockResult);
 
         completeLatch.countDown();
       } catch (InterruptedException ignore) {
