@@ -19,12 +19,12 @@ public interface EntityLocker<ID> {
    * @return result of locking
    * @throws InterruptedException thread with lock have been interrupted
    */
-  boolean globalLock() throws InterruptedException;
+  boolean globalLock(Class<?> clazz) throws InterruptedException;
 
   /**
    * release global lock
    */
-  void globalUnlock();
+  void globalUnlock(Class<?> clazz);
 
   /**
    * Lock entity with certain id
