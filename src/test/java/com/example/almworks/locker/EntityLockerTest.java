@@ -21,8 +21,9 @@ import static org.junit.jupiter.api.Assertions.*;
 class EntityLockerTest {
 
   private static final String TEST_ID = "TEST_ID";
-  private static final Object TEST_ENTITY = new Object();
-  private static final Class<?> TEST_ENTITY_CLASS = TEST_ENTITY.getClass();
+  private static final String TEST_ID2 = "TEST_ID2";
+  private static final String TEST_ID3 = "TEST_ID3";
+  private static final Class<?> TEST_ENTITY_CLASS = Object.class;
 
   @Test
   void lockUnlock() throws InterruptedException {
@@ -35,9 +36,9 @@ class EntityLockerTest {
     entityLocker.unlock(TEST_ID, TEST_ENTITY_CLASS);
   }
 
-  @Test
-//  @Timeout(value = 3)
-//  @RepeatedTest(50)
+//  @Test
+  @Timeout(value = 3)
+  @RepeatedTest(50)
   void lockUnlockMultiThreaded() throws InterruptedException {
 
     EntityLocker<String> entityLocker = new EntityLockerImpl<>();
@@ -427,6 +428,53 @@ class EntityLockerTest {
         phase3.await();
 
         lockResult = entityLocker.lock(TEST_ID, TEST_ENTITY_CLASS, 1, TimeUnit.SECONDS);
+        assertTrue(lockResult);
+
+        completeLatch.countDown();
+      } catch (InterruptedException ignore) {
+        /* NOP */
+      }
+    });
+
+    thread1.start();
+    thread2.start();
+
+    completeLatch.await();
+  }
+
+  @Test
+  @Timeout(value = 3)
+  void whenLock_EscalateToGlobal() throws InterruptedException {
+
+    EntityLocker<String> entityLocker = new EntityLockerImpl<>(1);
+
+    CountDownLatch phase1 = new CountDownLatch(1);
+    CountDownLatch completeLatch = new CountDownLatch(2);
+
+    // takes successfully global lock
+    Thread thread1 = new Thread(() -> {
+      try {
+        boolean lockResult = entityLocker.lock(TEST_ID, TEST_ENTITY_CLASS);
+        assertTrue(lockResult);
+        lockResult = entityLocker.lock(TEST_ID2, TEST_ENTITY_CLASS);
+        assertTrue(lockResult);
+
+        phase1.countDown();
+
+        entityLocker.globalUnlock(TEST_ENTITY_CLASS);
+
+        completeLatch.countDown();
+      } catch (InterruptedException ignore) {
+        /* NOP */
+      }
+    });
+
+    //
+    Thread thread2 = new Thread(() -> {
+      try {
+        phase1.await();
+
+        boolean lockResult = entityLocker.lock(TEST_ID3, TEST_ENTITY_CLASS);
         assertTrue(lockResult);
 
         completeLatch.countDown();

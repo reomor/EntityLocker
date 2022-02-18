@@ -70,23 +70,16 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
 
   @Override
   public void globalUnlock(Class<?> clazz) {
-
-    innerLock.lock();
-
-    try {
-      ReentrantLock classGlobalLock = getCurrentClassGlobalLock(clazz);
-      if (classGlobalLock != null) {
-        classGlobalLock.unlock();
-      }
-    } finally {
-      innerLock.unlock();
+    ReentrantLock classGlobalLock = getCurrentClassGlobalLock(clazz);
+    // oh yeah
+    int holdCount = classGlobalLock.getHoldCount();
+    for (int i = 0; i < holdCount; i++) {
+      classGlobalLock.unlock();
     }
   }
 
   @Override
   public boolean lock(@NonNull ID entityId, Class<?> clazz) throws InterruptedException {
-
-    innerLock.lock();
 
     ReentrantLock classGlobalLock = getOrCreateClassGlobalLock(clazz);
 
@@ -106,7 +99,6 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
     postLockActions(clazz);
 
     classGlobalLock.unlock();
-    innerLock.unlock();
 
     return true;
   }
@@ -116,14 +108,7 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
 
     long startTimeInBaseUnit = timeUnit.convert(System.currentTimeMillis(), TimeUnit.MILLISECONDS);
 
-    innerLock.lock();
-
-    ReentrantLock classGlobalLock;
-    try {
-      classGlobalLock = getOrCreateClassGlobalLock(clazz);
-    } finally {
-      innerLock.unlock();
-    }
+    ReentrantLock classGlobalLock = getOrCreateClassGlobalLock(clazz);
 
     if (!classGlobalLock.tryLock(timeout, timeUnit)) {
       return false;
@@ -163,16 +148,17 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
 
   @ThreadSafeIMHO
   private void postUnlockActions(Class<?> clazz) {
-    // lock because of signal
-    innerLock.lock();
+    // in order to escape deadlock locks are taken from global to inner
     ReentrantLock globalLock = getOrCreateClassGlobalLock(clazz);
+    // lock because of signal
     globalLock.lock();
+    innerLock.lock();
     try {
       getNumberOfBlockedObjects(clazz).decrementAndGet();
       getClassGlobalLockCondition(clazz).signalAll();
     } finally {
-      globalLock.unlock();
       innerLock.unlock();
+      globalLock.unlock();
     }
   }
 
@@ -202,6 +188,7 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
   }
 
   @NotNull
+  @ThreadSafeIMHO
   private AtomicInteger getNumberOfBlockedObjects(Class<?> clazz) {
     innerLock.lock();
     try {
@@ -213,6 +200,7 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
   }
 
   @NotNull
+  @ThreadSafeIMHO
   private ReentrantLock getOrCreateClassGlobalLock(Class<?> clazz) {
     innerLock.lock();
     try {
@@ -224,18 +212,19 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
     }
   }
 
-  @Nullable
+  @NotNull
+  @ThreadSafeIMHO
   protected ReentrantLock getCurrentClassGlobalLock(Class<?> clazz) {
     innerLock.lock();
     try {
-      getOrCreateClassGlobalLock(clazz);
-      return clazzGlobalLocks.get(clazz);
+      return clazzGlobalLocks.computeIfAbsent(clazz, ignore -> new ReentrantLock());
     } finally {
       innerLock.unlock();
     }
   }
 
   @NotNull
+  @ThreadSafeIMHO
   private Condition getClassGlobalLockCondition(Class<?> clazz) {
     innerLock.lock();
     try {
@@ -247,6 +236,7 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
   }
 
   @Nullable
+  @ThreadSafeIMHO
   private ReentrantLock getCurrentLock(ID entityId, Class<?> clazz) {
     innerLock.lock();
     try {
@@ -258,19 +248,23 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
   }
 
   @NotNull
+  @ThreadSafeIMHO
   private ReentrantLock getOrCreateLock(ID entityId, Class<?> clazz) {
+    innerLock.lock();
+    try {
+      Map<ID, ReentrantLock> entityLockMap = entitiesLockMaps.computeIfAbsent(clazz, ignore -> new HashMap<>());
+      ReentrantLock lock = entityLockMap.computeIfAbsent(entityId, ignore -> new ReentrantLock());
 
-    Map<ID, ReentrantLock> entityLockMap = entitiesLockMaps.computeIfAbsent(clazz, ignore -> new HashMap<>());
-    ReentrantLock lock = entityLockMap.computeIfAbsent(entityId, ignore -> new ReentrantLock());
+      bindThreadWithEntity(entityId, clazz);
 
-    bindThreadWithEntity(entityId, clazz);
-
-    return lock;
+      return lock;
+    } finally {
+      innerLock.unlock();
+    }
   }
 
+  @ThreadSafeIMHO
   private void unlockEntity(@NonNull ID entityId, Class<?> clazz) {
-
-    innerLock.lock();
 
     ReentrantLock currentLock = getCurrentLock(entityId, clazz);
 
@@ -279,14 +273,12 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
       // current thread is the owner and everything is ok
       // current thread is not the owner and IllegalArgumentException is raised
       currentLock.unlock();
-
-      unbindThreadWithEntity(entityId, clazz);
-
-      // success - reduce number of locked objects
-      postUnlockActions(clazz);
     }
 
-    innerLock.unlock();
+    unbindThreadWithEntity(entityId, clazz);
+
+    // success - reduce number of locked objects
+    postUnlockActions(clazz);
   }
 
   @ThreadSafeIMHO
@@ -295,7 +287,7 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
     try {
       long threadId = Thread.currentThread().getId();
       Map<Class<?>, Set<ID>> classIDMap = threadLockedEntities.computeIfAbsent(threadId, ignore -> new HashMap<>());
-      Set<ID> threadClassEntities = classIDMap.getOrDefault(clazz, new HashSet<>());
+      Set<ID> threadClassEntities = classIDMap.computeIfAbsent(clazz, ignore -> new HashSet<>());
       threadClassEntities.add(entityId);
       clazzNumberOfLockedObjects.computeIfAbsent(clazz, ignore -> new AtomicInteger(0));
     } finally {
@@ -309,7 +301,7 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
     try {
       long threadId = Thread.currentThread().getId();
       Map<Class<?>, Set<ID>> classIDMap = threadLockedEntities.getOrDefault(threadId, Map.of());
-      Set<ID> threadClassEntities = classIDMap.getOrDefault(clazz, new HashSet<>());
+      Set<ID> threadClassEntities = classIDMap.computeIfAbsent(clazz, ignore -> new HashSet<>());
       threadClassEntities.remove(entityId);
     } finally {
       innerLock.unlock();
@@ -349,7 +341,9 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
       Map<ID, ReentrantLock> lockMap = entitiesLockMaps.getOrDefault(clazz, Map.of());
       lockMap.forEach((id, reentrantLock) -> {
         if (lockedEntities.contains(id)) {
-          reentrantLock.unlock();
+          if (reentrantLock.isLocked()) {
+            reentrantLock.unlock();
+          }
         }
       });
     } finally {
