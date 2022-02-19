@@ -496,15 +496,15 @@ class EntityLockerTest {
     thread1.start();
     thread2.start();
 
+    completeLatch.await();
+
     ReentrantLock classGlobalLock = jailbreak.getCurrentClassGlobalLock(TEST_ENTITY_CLASS);
 
     assertFalse(classGlobalLock.isLocked());
-
-    completeLatch.await();
   }
 
   @Test
-  @Timeout(value = 3)
+//  @Timeout(value = 3)
   void whenLock_EscalateToGlobalFailed() throws InterruptedException {
 
     @Jailbreak
@@ -555,30 +555,45 @@ class EntityLockerTest {
     thread1.start();
     thread2.start();
 
+    completeLatch.await();
+
     ReentrantLock classGlobalLock = jailbreak.getCurrentClassGlobalLock(TEST_ENTITY_CLASS);
 
     assertFalse(classGlobalLock.isLocked());
-
-    completeLatch.await();
   }
 
   @Test
   @Timeout(value = 3)
-  void whenLock_EscalateToGlobalFailed() throws InterruptedException {
+  void whenLockUnlock_AllConditionsAreSavedProperly() throws InterruptedException {
 
     @Jailbreak
-    EntityLockerImpl<String> entityLocker = new EntityLockerImpl<>(2);
+    EntityLockerImpl<String> entityLocker = new EntityLockerImpl<>();
     EntityLockerImpl<String> jailbreak = entityLocker.jailbreak();
 
-    CountDownLatch completeLatch = new CountDownLatch(2);
+    CountDownLatch completeLatch = new CountDownLatch(1);
 
-    Thread thread1 = new Thread(() -> {
+    Thread thread = new Thread(() -> {
       try {
 
-        boolean lockResult = entityLocker.lock(TEST_ID3, TEST_ENTITY_CLASS);
+        // lock
+        boolean lockResult = entityLocker.lock(TEST_ID, TEST_ENTITY_CLASS);
         assertTrue(lockResult);
 
+        assertNotNull(entityLocker.jailbreak().clazzGlobalLocks.get(TEST_ENTITY_CLASS));
+        assertNotNull(entityLocker.jailbreak().clazzGlobalLocksConditions.get(TEST_ENTITY_CLASS));
+        assertNotNull(entityLocker.jailbreak().entitiesLockMaps.get(TEST_ENTITY_CLASS).get(TEST_ID));
 
+        long threadId = Thread.currentThread().getId();
+        Set<String> entityIds = entityLocker.jailbreak().threadLockedEntities.get(threadId).get(TEST_ENTITY_CLASS);
+        assertTrue(entityIds.contains(TEST_ID));
+
+        assertEquals(1, entityLocker.jailbreak().clazzNumberOfLockedObjects.get(TEST_ENTITY_CLASS).get());
+
+        // unlock
+        entityLocker.unlock(TEST_ID, TEST_ENTITY_CLASS);
+        entityIds = entityLocker.jailbreak().threadLockedEntities.get(threadId).get(TEST_ENTITY_CLASS);
+        assertTrue(entityIds.isEmpty());
+        assertEquals(0, entityLocker.jailbreak().clazzNumberOfLockedObjects.get(TEST_ENTITY_CLASS).get());
 
         completeLatch.countDown();
       } catch (InterruptedException ignore) {
@@ -586,13 +601,13 @@ class EntityLockerTest {
       }
     });
 
-    thread1.start();
+    thread.start();
+
+    completeLatch.await();
 
     ReentrantLock classGlobalLock = jailbreak.getCurrentClassGlobalLock(TEST_ENTITY_CLASS);
 
     assertFalse(classGlobalLock.isLocked());
-
-    completeLatch.await();
   }
 
   @Data

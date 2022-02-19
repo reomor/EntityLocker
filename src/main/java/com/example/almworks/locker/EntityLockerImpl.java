@@ -54,7 +54,8 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
     classGlobalLock.lockInterruptibly();
     Condition classGlobalLockCondition = getClassGlobalLockCondition(clazz);
 
-    while (globalLockIsNotPossibleForThread(clazz)) {
+    // 0 because there are no attempts to lock certain entity
+    while (globalLockIsNotPossibleForThread(clazz, 0)) {
       // then it's not possible to get global lock
       classGlobalLockCondition.await();
     }
@@ -165,20 +166,21 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
     try {
       int lockedByThreadEntities = getNumberOfLockedByThreadEntities(clazz);
       // check escalation conditions
-      return lockedByThreadEntities >= globalEscalationThreshold && !globalLockIsNotPossibleForThread(clazz);
+      return lockedByThreadEntities >= globalEscalationThreshold && !globalLockIsNotPossibleForThread(clazz, 1);
     } finally {
       innerLock.unlock();
     }
   }
 
   @ThreadSafeIMHO
-  private boolean globalLockIsNotPossibleForThread(Class<?> clazz) {
+  private boolean globalLockIsNotPossibleForThread(Class<?> clazz, int additionalThread) {
     innerLock.lock();
     try {
       // there must be not blocked entities at all
-      return getNumberOfBlockedObjects(clazz).get() != 0
+      int blockedObjectsAmount = getNumberOfBlockedObjects(clazz).get() + additionalThread;
+      return blockedObjectsAmount != 0
         // or all of them are blocked by the same thread
-        && getNumberOfBlockedObjects(clazz).get() != getNumberOfLockedByThreadEntities(clazz);
+        && blockedObjectsAmount != getNumberOfLockedByThreadEntities(clazz);
     } finally {
       innerLock.unlock();
     }
