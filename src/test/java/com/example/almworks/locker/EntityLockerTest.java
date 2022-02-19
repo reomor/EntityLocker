@@ -3,17 +3,20 @@ package com.example.almworks.locker;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import manifold.ext.rt.api.Jailbreak;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -84,6 +87,7 @@ class EntityLockerTest {
   @RepeatedTest(50)
   void lockOneAfterAnother() throws InterruptedException {
 
+    @Jailbreak
     Entity<String> entity = new Entity<>(TEST_ID, 0);
     Class<?> entityClass = entity.getClass();
     int expectedValue = 2;
@@ -446,7 +450,13 @@ class EntityLockerTest {
   @Timeout(value = 3)
   void whenLock_EscalateToGlobal() throws InterruptedException {
 
-    EntityLocker<String> entityLocker = new EntityLockerImpl<>(1);
+    @Jailbreak
+    EntityLockerImpl<String> entityLocker = new EntityLockerImpl<>(2);
+
+    // for type-safe reflection
+    // this approach differs from 'protected methods' like getNumberOfLockedObject
+    // but without maliford plugin rather difficult to develop
+    EntityLockerImpl<String> jailbreak = entityLocker.jailbreak();
 
     CountDownLatch phase1 = new CountDownLatch(1);
     CountDownLatch completeLatch = new CountDownLatch(2);
@@ -485,6 +495,102 @@ class EntityLockerTest {
 
     thread1.start();
     thread2.start();
+
+    ReentrantLock classGlobalLock = jailbreak.getCurrentClassGlobalLock(TEST_ENTITY_CLASS);
+
+    assertFalse(classGlobalLock.isLocked());
+
+    completeLatch.await();
+  }
+
+  @Test
+  @Timeout(value = 3)
+  void whenLock_EscalateToGlobalFailed() throws InterruptedException {
+
+    @Jailbreak
+    EntityLockerImpl<String> entityLocker = new EntityLockerImpl<>(2);
+    EntityLockerImpl<String> jailbreak = entityLocker.jailbreak();
+
+    CountDownLatch phase1 = new CountDownLatch(1);
+    CountDownLatch completeLatch = new CountDownLatch(2);
+
+    Thread thread1 = new Thread(() -> {
+      try {
+
+        boolean lockResult = entityLocker.lock(TEST_ID3, TEST_ENTITY_CLASS);
+        assertTrue(lockResult);
+
+        phase1.countDown();
+
+        completeLatch.countDown();
+      } catch (InterruptedException ignore) {
+        /* NOP */
+      }
+    });
+
+    //
+    Thread thread2 = new Thread(() -> {
+      try {
+        phase1.await();
+
+        boolean lockResult = entityLocker.lock(TEST_ID, TEST_ENTITY_CLASS);
+        assertTrue(lockResult);
+        lockResult = entityLocker.lock(TEST_ID2, TEST_ENTITY_CLASS);
+        assertTrue(lockResult);
+
+        long threadId = Thread.currentThread().getId();
+        Set<String> lockedEntityIds = entityLocker.jailbreak().threadLockedEntities.get(threadId).get(TEST_ENTITY_CLASS);
+
+        Set<String> expectedEntityIds = Set.of(TEST_ID, TEST_ID2);
+        assertTrue(lockedEntityIds.containsAll(expectedEntityIds));
+
+        assertEquals(expectedEntityIds.size(), entityLocker.jailbreak().getNumberOfLockedByThreadEntities(TEST_ENTITY_CLASS));
+
+        completeLatch.countDown();
+      } catch (InterruptedException ignore) {
+        /* NOP */
+      }
+    });
+
+    thread1.start();
+    thread2.start();
+
+    ReentrantLock classGlobalLock = jailbreak.getCurrentClassGlobalLock(TEST_ENTITY_CLASS);
+
+    assertFalse(classGlobalLock.isLocked());
+
+    completeLatch.await();
+  }
+
+  @Test
+  @Timeout(value = 3)
+  void whenLock_EscalateToGlobalFailed() throws InterruptedException {
+
+    @Jailbreak
+    EntityLockerImpl<String> entityLocker = new EntityLockerImpl<>(2);
+    EntityLockerImpl<String> jailbreak = entityLocker.jailbreak();
+
+    CountDownLatch completeLatch = new CountDownLatch(2);
+
+    Thread thread1 = new Thread(() -> {
+      try {
+
+        boolean lockResult = entityLocker.lock(TEST_ID3, TEST_ENTITY_CLASS);
+        assertTrue(lockResult);
+
+
+
+        completeLatch.countDown();
+      } catch (InterruptedException ignore) {
+        /* NOP */
+      }
+    });
+
+    thread1.start();
+
+    ReentrantLock classGlobalLock = jailbreak.getCurrentClassGlobalLock(TEST_ENTITY_CLASS);
+
+    assertFalse(classGlobalLock.isLocked());
 
     completeLatch.await();
   }

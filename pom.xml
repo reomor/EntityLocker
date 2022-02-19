@@ -22,6 +22,7 @@
 
     <!-- tests -->
     <junit-jupiter-api.version>5.8.2</junit-jupiter-api.version>
+    <manifold.version>2022.1.5</manifold.version>
   </properties>
 
   <dependencies>
@@ -62,6 +63,43 @@
       <scope>test</scope>
     </dependency>
 
+<!--    <dependency>-->
+<!--      <groupId>systems.manifold</groupId>-->
+<!--      <artifactId>manifold</artifactId>-->
+<!--      <version>${manifold.version}</version>-->
+<!--      <scope>test</scope>-->
+<!--    </dependency>-->
+    <dependency>
+      <groupId>systems.manifold</groupId>
+      <artifactId>manifold-ext</artifactId>
+      <version>${manifold.version}</version>
+      <scope>provided</scope>
+    </dependency>
+
   </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+
+        <!-- version 3.8.0+ is necessary to support Java 10+ -->
+        <version>3.8.0</version>
+
+        <configuration>
+          <encoding>UTF-8</encoding>
+          <compilerArgs>
+            <arg>-Xplugin:Manifold</arg>
+          </compilerArgs>
+
+          <!-- Add Manifold compile-time dependencies in the processor path -->
+          <annotationProcessorPaths>
+          </annotationProcessorPaths>
+
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
 
 </project>

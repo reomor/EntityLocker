@@ -18,6 +18,7 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
   private static final int DEFAULT_GLOBAL_LOCK_ESCALATION_THRESHOLD = 10;
 
   // provide lock for atomic operation on all objects
+  // because all kind of collections are not synchronized
   private final ReentrantLock innerLock;
   private final Map<Class<?>, ReentrantLock> clazzGlobalLocks;
   private final Map<Class<?>, Condition> clazzGlobalLocksConditions;
@@ -47,14 +48,7 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
   @Override
   public boolean globalLock(Class<?> clazz) throws InterruptedException {
 
-    innerLock.lock();
-
-    ReentrantLock classGlobalLock;
-    try {
-      classGlobalLock = getOrCreateClassGlobalLock(clazz);
-    } finally {
-      innerLock.unlock();
-    }
+    ReentrantLock classGlobalLock = getOrCreateClassGlobalLock(clazz);
 
     // block class or wait
     classGlobalLock.lockInterruptibly();
@@ -89,9 +83,12 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
 
     // try to get a global lock
     if (escalationConditionsFulfilled(clazz)) {
-        // success - free all locked, hold lock and return
-        unlockLockedByThread(clazz);
-        return true;
+      // success - free all locked, hold global lock and return
+      // I've some doubts about it because maybe it's worth to save information about all locked objects
+      // and add lock for new entity. That approach will make possible to deescalate global lock.
+      // Anyway the task-08 is only about escalation with de-process.
+      unlockLockedByThread(clazz);
+      return true;
     }
 
     // fail - continue with separate lock
@@ -337,13 +334,12 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
   private void unlockLockedByThread(Class<?> clazz) {
     innerLock.lock();
     try {
-      Set<ID> lockedEntities = getTreadLockedEntities(clazz);
+      Set<ID> lockedEntitiesIds = getTreadLockedEntities(clazz);
       Map<ID, ReentrantLock> lockMap = entitiesLockMaps.getOrDefault(clazz, Map.of());
-      lockMap.forEach((id, reentrantLock) -> {
-        if (lockedEntities.contains(id)) {
-          if (reentrantLock.isLocked()) {
-            reentrantLock.unlock();
-          }
+      lockMap.forEach((entityId, reentrantLock) -> {
+        if (lockedEntitiesIds.contains(entityId) && reentrantLock.isLocked()) {
+          reentrantLock.unlock();
+          getNumberOfBlockedObjects(clazz).decrementAndGet();
         }
       });
     } finally {

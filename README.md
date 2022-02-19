@@ -22,6 +22,6 @@ Bonus requirements (optional):
 
 - [x] `task-05` Allow reentrant locking
 - [x] `task-06` Allow the caller to specify timeout for locking an entity
-- [ ] `task-07` Implement protection from deadlocks (but not taking into account possible locks outside EntityLocker)
+- [x] `task-07` Implement protection from deadlocks (but not taking into account possible locks outside EntityLocker)
 - [x] `task-08` Implement global lock. Protected code that executes under a global lock must not execute concurrently with any other protected code
-- [ ] `task-09` Implement lock escalation. If a single thread has locked too many entities, escalate its lock to be a global lock. 
+- [x] `task-09` Implement lock escalation. If a single thread has locked too many entities, escalate its lock to be a global lock. 
