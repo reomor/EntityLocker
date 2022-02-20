@@ -7,6 +7,12 @@ type of entities in the application.
 EntityLocker itself does not deal with the entities, only with the IDs (primary keys) of the entities.
 <p>
 
+Disclaimer:
+The main idea is about the fact that Entities have separate class and same EntityLocker can work with different entities with same ID type.
+So basic type parameters are: Entity class and Entity ID. 
+There is no explicit protection from deadlock and some tests have helped me find one (order in which global and inner lock are taken). 
+Writing tests and code analysis are still main drivers.
+
 <p>
 Requirements:
 
@@ -22,6 +28,6 @@ Bonus requirements (optional):
 
 - [x] `task-05` Allow reentrant locking
 - [x] `task-06` Allow the caller to specify timeout for locking an entity
-- [x] `task-07` Implement protection from deadlocks (but not taking into account possible locks outside EntityLocker)
+- [ ] `task-07` Implement protection from deadlocks (but not taking into account possible locks outside EntityLocker)
 - [x] `task-08` Implement global lock. Protected code that executes under a global lock must not execute concurrently with any other protected code
 - [x] `task-09` Implement lock escalation. If a single thread has locked too many entities, escalate its lock to be a global lock. 
