@@ -23,6 +23,10 @@
     <!-- tests -->
     <junit-jupiter-api.version>5.8.2</junit-jupiter-api.version>
     <manifold.version>2022.1.5</manifold.version>
+
+    <!-- plugins -->
+    <maven-compiler-plugin.version>3.8.0</maven-compiler-plugin.version>
+    <maven-surefire-plugin.version>2.22.2</maven-surefire-plugin.version>
   </properties>
 
   <dependencies>
@@ -62,6 +66,12 @@
       <version>${junit-jupiter-api.version}</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+      <version>${junit-jupiter-api.version}</version>
+      <scope>test</scope>
+    </dependency>
 
 <!--    <dependency>-->
 <!--      <groupId>systems.manifold</groupId>-->
@@ -80,12 +90,13 @@
 
   <build>
     <plugins>
+
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
 
         <!-- version 3.8.0+ is necessary to support Java 10+ -->
-        <version>3.8.0</version>
+        <version>${maven-compiler-plugin.version}</version>
 
         <configuration>
           <encoding>UTF-8</encoding>
@@ -99,6 +110,13 @@
 
         </configuration>
       </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>${maven-surefire-plugin.version}</version>
+      </plugin>
+
     </plugins>
   </build>
 
