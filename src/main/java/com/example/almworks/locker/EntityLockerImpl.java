@@ -267,7 +267,7 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
 
     ReentrantLock currentLock = getCurrentLock(entityId, clazz);
 
-    if (currentLock != null) {
+    if (currentLock != null && currentLock.isLocked()) {
       // attempt to release the lock:
       // current thread is the owner and everything is ok
       // current thread is not the owner and IllegalArgumentException is raised
@@ -299,7 +299,7 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
     innerLock.lock();
     try {
       long threadId = Thread.currentThread().getId();
-      Map<Class<?>, Set<ID>> classIDMap = threadLockedEntities.getOrDefault(threadId, Map.of());
+      Map<Class<?>, Set<ID>> classIDMap = threadLockedEntities.getOrDefault(threadId, new HashMap<>());
       Set<ID> threadClassEntities = classIDMap.computeIfAbsent(clazz, ignore -> new HashSet<>());
       threadClassEntities.remove(entityId);
     } finally {
