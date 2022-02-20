@@ -39,6 +39,38 @@ class EntityLockerTest {
     entityLocker.unlock(TEST_ID, TEST_ENTITY_CLASS);
   }
 
+  @Test
+  void lockUnlock_throwsException() throws InterruptedException {
+
+    EntityLockerImpl<String> entityLocker = new EntityLockerImpl<>();
+
+    CountDownLatch phase1 = new CountDownLatch(1);
+    CountDownLatch completeLatch = new CountDownLatch(1);
+    AtomicInteger errors = new AtomicInteger(0);
+
+    ReentrantLock lock = entityLocker.jailbreak().getOrCreateLock(TEST_ID, TEST_ENTITY_CLASS);
+
+    Thread thread1 = new Thread(() -> {
+      try {
+        phase1.await();
+        entityLocker.lock(TEST_ID, TEST_ENTITY_CLASS);
+      } catch (InterruptedException e) {
+        errors.incrementAndGet();
+      } finally {
+        completeLatch.countDown();
+      }
+    });
+
+    thread1.start();
+    phase1.countDown();
+
+    thread1.interrupt();
+
+    completeLatch.await();
+
+    assertEquals(1, errors.get());
+  }
+
 //  @Test
   @Timeout(value = 3)
   @RepeatedTest(50)
@@ -214,10 +246,12 @@ class EntityLockerTest {
 
     boolean timeoutLockResult = entityLocker.lock(TEST_ID, TEST_ENTITY_CLASS, 1, TimeUnit.SECONDS);
     assertTrue(timeoutLockResult);
+
+    entityLocker.unlock(TEST_ID, TEST_ENTITY_CLASS);
   }
 
   @Test
-  @Timeout(value = 3)
+  @Timeout(value = 5)
   void timeoutLock() throws InterruptedException {
 
     EntityLocker<String> entityLocker = new EntityLockerImpl<>();
@@ -234,6 +268,10 @@ class EntityLockerTest {
         thread2StartLatch.countDown();
 
         completeLatch.countDown();
+
+        Thread.sleep(1500);
+
+        entityLocker.unlock(TEST_ID, TEST_ENTITY_CLASS);
       } catch (InterruptedException ignore) {
         /* NOP */
       }
@@ -292,6 +330,8 @@ class EntityLockerTest {
         assertTrue(lockResult);
 
         completeLatch.countDown();
+
+        entityLocker.unlock(TEST_ID, TEST_ENTITY_CLASS);
       } catch (InterruptedException ignore) {
         /* NOP */
       }
@@ -620,6 +660,78 @@ class EntityLockerTest {
   }
 
   @Test
+//  @Timeout(value = 3)
+  void whenLockTimeout_EscalateToGlobalFailed() throws InterruptedException {
+
+    @Jailbreak
+    EntityLockerImpl<String> entityLocker = new EntityLockerImpl<>(2);
+    EntityLockerImpl<String> jailbreak = entityLocker.jailbreak();
+
+    CountDownLatch phase1 = new CountDownLatch(1);
+    CountDownLatch phase2 = new CountDownLatch(1);
+    CountDownLatch phase3 = new CountDownLatch(1);
+    CountDownLatch completeLatch = new CountDownLatch(2);
+
+    Thread thread1 = new Thread(() -> {
+      try {
+
+        boolean lockResult = entityLocker.lock(TEST_ID3, TEST_ENTITY_CLASS, 1, TimeUnit.SECONDS);
+        assertTrue(lockResult);
+
+        phase1.countDown();
+        phase2.await();
+
+        entityLocker.unlock(TEST_ID3, TEST_ENTITY_CLASS);
+
+        phase3.countDown();
+
+        completeLatch.countDown();
+      } catch (InterruptedException ignore) {
+        /* NOP */
+      }
+    });
+
+    //
+    Thread thread2 = new Thread(() -> {
+      try {
+        phase1.await();
+
+        boolean lockResult = entityLocker.lock(TEST_ID, TEST_ENTITY_CLASS, 1, TimeUnit.SECONDS);
+        assertTrue(lockResult);
+        lockResult = entityLocker.lock(TEST_ID2, TEST_ENTITY_CLASS, 1, TimeUnit.SECONDS);
+        assertTrue(lockResult);
+
+        phase2.countDown();
+        phase3.await();
+
+        long threadId = Thread.currentThread().getId();
+        Set<String> lockedEntityIds = entityLocker.jailbreak().threadLockedEntities.get(threadId).get(TEST_ENTITY_CLASS);
+
+        Set<String> expectedEntityIds = Set.of(TEST_ID, TEST_ID2);
+        assertTrue(lockedEntityIds.containsAll(expectedEntityIds));
+
+        assertEquals(expectedEntityIds.size(), entityLocker.jailbreak().getNumberOfLockedByThreadEntities(TEST_ENTITY_CLASS));
+
+        entityLocker.unlock(TEST_ID, TEST_ENTITY_CLASS);
+        entityLocker.unlock(TEST_ID2, TEST_ENTITY_CLASS);
+
+        completeLatch.countDown();
+      } catch (InterruptedException ignore) {
+        /* NOP */
+      }
+    });
+
+    thread1.start();
+    thread2.start();
+
+    completeLatch.await();
+
+    ReentrantLock classGlobalLock = jailbreak.getCurrentClassGlobalLock(TEST_ENTITY_CLASS);
+
+    assertFalse(classGlobalLock.isLocked());
+  }
+
+  @Test
   @Timeout(value = 3)
   void whenLockUnlock_AllConditionsAreSavedProperly() throws InterruptedException {
 
@@ -634,6 +746,54 @@ class EntityLockerTest {
 
         // lock
         boolean lockResult = entityLocker.lock(TEST_ID, TEST_ENTITY_CLASS);
+        assertTrue(lockResult);
+
+        assertNotNull(entityLocker.jailbreak().clazzGlobalLocks.get(TEST_ENTITY_CLASS));
+        assertNotNull(entityLocker.jailbreak().clazzGlobalLocksConditions.get(TEST_ENTITY_CLASS));
+        assertNotNull(entityLocker.jailbreak().entitiesLockMaps.get(TEST_ENTITY_CLASS).get(TEST_ID));
+
+        long threadId = Thread.currentThread().getId();
+        Set<String> entityIds = entityLocker.jailbreak().threadLockedEntities.get(threadId).get(TEST_ENTITY_CLASS);
+        assertTrue(entityIds.contains(TEST_ID));
+
+        assertEquals(1, entityLocker.jailbreak().clazzNumberOfLockedObjects.get(TEST_ENTITY_CLASS).get());
+
+        // unlock
+        entityLocker.unlock(TEST_ID, TEST_ENTITY_CLASS);
+        entityIds = entityLocker.jailbreak().threadLockedEntities.get(threadId).get(TEST_ENTITY_CLASS);
+        assertTrue(entityIds.isEmpty());
+        assertEquals(0, entityLocker.jailbreak().clazzNumberOfLockedObjects.get(TEST_ENTITY_CLASS).get());
+
+        completeLatch.countDown();
+      } catch (InterruptedException ignore) {
+        /* NOP */
+      }
+    });
+
+    thread.start();
+
+    completeLatch.await();
+
+    ReentrantLock classGlobalLock = jailbreak.getCurrentClassGlobalLock(TEST_ENTITY_CLASS);
+
+    assertFalse(classGlobalLock.isLocked());
+  }
+
+  @Test
+  @Timeout(value = 3)
+  void whenLockTimeoutUnlock_AllConditionsAreSavedProperly() throws InterruptedException {
+
+    @Jailbreak
+    EntityLockerImpl<String> entityLocker = new EntityLockerImpl<>();
+    EntityLockerImpl<String> jailbreak = entityLocker.jailbreak();
+
+    CountDownLatch completeLatch = new CountDownLatch(1);
+
+    Thread thread = new Thread(() -> {
+      try {
+
+        // lock
+        boolean lockResult = entityLocker.lock(TEST_ID, TEST_ENTITY_CLASS, 1, TimeUnit.SECONDS);
         assertTrue(lockResult);
 
         assertNotNull(entityLocker.jailbreak().clazzGlobalLocks.get(TEST_ENTITY_CLASS));
@@ -712,6 +872,68 @@ class EntityLockerTest {
 
         // successfully locked
         assertTrue(lockResult);
+
+        entityLocker.globalUnlock(TEST_ENTITY_CLASS);
+
+        completeLatch.countDown();
+      } catch (InterruptedException ignore) {
+        /* NOP */
+      }
+    });
+
+    thread1.start();
+    thread2.start();
+
+    completeLatch.await();
+  }
+
+  @Test
+  void whenGlobalLockTimeout_waitingEntityUnlock() throws InterruptedException {
+
+    EntityLocker<String> entityLocker = new EntityLockerImpl<>();
+
+    CountDownLatch phase1 = new CountDownLatch(1);
+    CountDownLatch completeLatch = new CountDownLatch(2);
+
+    final int globalLockWaiting = 1000;
+
+    Thread thread1 = new Thread(() -> {
+      try {
+
+        boolean lockResult = entityLocker.lock(TEST_ID, TEST_ENTITY_CLASS, 1, TimeUnit.SECONDS);
+        assertTrue(lockResult);
+
+        phase1.countDown();
+
+        // after 1 seconds entity unlocks
+        Thread.sleep(globalLockWaiting);
+
+        entityLocker.unlock(TEST_ID, TEST_ENTITY_CLASS);
+
+        completeLatch.countDown();
+      } catch (InterruptedException ignore) {
+        /* NOP */
+      }
+    });
+
+    //
+    Thread thread2 = new Thread(() -> {
+      try {
+        phase1.await();
+
+        long startTime = System.currentTimeMillis();
+        // that should cause infinite waiting
+        boolean lockResult = entityLocker.globalLock(TEST_ENTITY_CLASS);
+
+        long endTime = System.currentTimeMillis();
+
+        // waiting is approximately [990,1010] milliseconds
+        assertTrue(Math.abs(endTime - startTime - globalLockWaiting) <= 10);
+
+        // successfully locked
+        assertTrue(lockResult);
+
+        entityLocker.globalUnlock(TEST_ENTITY_CLASS);
 
         completeLatch.countDown();
       } catch (InterruptedException ignore) {
