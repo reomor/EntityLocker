@@ -14,6 +14,10 @@
     <maven.compiler.source>16</maven.compiler.source>
     <maven.compiler.target>16</maven.compiler.target>
 
+    <!-- sonar -->
+    <sonar.organization>reomor</sonar.organization>
+    <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+
     <!-- libs -->
     <lombok.version>1.18.22</lombok.version>
     <slf4j-api.version>1.7.35</slf4j-api.version>
@@ -73,12 +77,6 @@
       <scope>test</scope>
     </dependency>
 
-<!--    <dependency>-->
-<!--      <groupId>systems.manifold</groupId>-->
-<!--      <artifactId>manifold</artifactId>-->
-<!--      <version>${manifold.version}</version>-->
-<!--      <scope>test</scope>-->
-<!--    </dependency>-->
     <dependency>
       <groupId>systems.manifold</groupId>
       <artifactId>manifold-ext</artifactId>
