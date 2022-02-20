@@ -14,6 +14,10 @@
     <maven.compiler.source>16</maven.compiler.source>
     <maven.compiler.target>16</maven.compiler.target>
 
+    <!-- sonar -->
+    <sonar.organization>reomor</sonar.organization>
+    <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+
     <!-- libs -->
     <lombok.version>1.18.22</lombok.version>
     <slf4j-api.version>1.7.35</slf4j-api.version>
@@ -23,6 +27,10 @@
     <!-- tests -->
     <junit-jupiter-api.version>5.8.2</junit-jupiter-api.version>
     <manifold.version>2022.1.5</manifold.version>
+
+    <!-- plugins -->
+    <maven-compiler-plugin.version>3.8.0</maven-compiler-plugin.version>
+    <maven-surefire-plugin.version>2.22.2</maven-surefire-plugin.version>
   </properties>
 
   <dependencies>
@@ -62,13 +70,13 @@
       <version>${junit-jupiter-api.version}</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+      <version>${junit-jupiter-api.version}</version>
+      <scope>test</scope>
+    </dependency>
 
-<!--    <dependency>-->
-<!--      <groupId>systems.manifold</groupId>-->
-<!--      <artifactId>manifold</artifactId>-->
-<!--      <version>${manifold.version}</version>-->
-<!--      <scope>test</scope>-->
-<!--    </dependency>-->
     <dependency>
       <groupId>systems.manifold</groupId>
       <artifactId>manifold-ext</artifactId>
@@ -80,12 +88,13 @@
 
   <build>
     <plugins>
+
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
 
         <!-- version 3.8.0+ is necessary to support Java 10+ -->
-        <version>3.8.0</version>
+        <version>${maven-compiler-plugin.version}</version>
 
         <configuration>
           <encoding>UTF-8</encoding>
@@ -99,6 +108,33 @@
 
         </configuration>
       </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>${maven-surefire-plugin.version}</version>
+      </plugin>
+
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>0.8.7</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>report</id>
+            <phase>prepare-package</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
     </plugins>
   </build>
 

@@ -1,5 +1,7 @@
 ### Main task
 
+[![Java CI with Maven](https://github.com/reomor/EntityLocker/actions/workflows/maven.yml/badge.svg)](https://github.com/reomor/EntityLocker/actions/workflows/maven.yml)
+
 The task is to create a reusable utility class that provides synchronization mechanism similar to row-level DB locking.
 <p>
 The class is supposed to be used by the components that are responsible for managing storage and caching of different
