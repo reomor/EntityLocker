@@ -2,6 +2,7 @@
 
 [![Java CI with Maven](https://github.com/reomor/EntityLocker/actions/workflows/maven.yml/badge.svg)](https://github.com/reomor/EntityLocker/actions/workflows/maven.yml)
 [![codecov](https://codecov.io/gh/reomor/EntityLocker/branch/main/graph/badge.svg?token=U1T2UIM93I)](https://codecov.io/gh/reomor/EntityLocker)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=reomor_EntityLocker&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=reomor_EntityLocker)
 
 The task is to create a reusable utility class that provides synchronization mechanism similar to row-level DB locking.
 <p>
