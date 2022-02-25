@@ -22,9 +22,9 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
   private final ReentrantLock innerLock;
   private final Map<Class<?>, ReentrantLock> clazzGlobalLocks;
   private final Map<Class<?>, Condition> clazzGlobalLocksConditions;
+  private final Map<Class<?>, AtomicInteger> clazzNumberOfLockedObjects;
   private final Map<Class<?>, Map<ID, ReentrantLock>> entitiesLockMaps;
   private final Map<Long, Map<Class<?>, Set<ID>>> threadLockedEntities;
-  private final Map<Class<?>, AtomicInteger> clazzNumberOfLockedObjects;
   private final int globalEscalationThreshold;
 
   public EntityLockerImpl() {
@@ -67,6 +67,11 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
   public void globalUnlock(Class<?> clazz) {
     ReentrantLock classGlobalLock = getCurrentClassGlobalLock(clazz);
     if (classGlobalLock.isLocked()) {
+      // clean maps only when both conditions true
+      // lock is held by one (current process) and no waiters
+      if (classGlobalLock.getHoldCount() == 1 && !classGlobalLock.hasQueuedThreads()) {
+        clearClassGlobalLock(clazz);
+      }
       classGlobalLock.unlock();
     }
   }
@@ -215,6 +220,18 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
     innerLock.lock();
     try {
       return clazzGlobalLocks.computeIfAbsent(clazz, ignore -> new ReentrantLock());
+    } finally {
+      innerLock.unlock();
+    }
+  }
+
+  @ThreadSafeIMHO
+  private void clearClassGlobalLock(Class<?> clazz) {
+    innerLock.lock();
+    try {
+      clazzNumberOfLockedObjects.remove(clazz);
+      clazzGlobalLocksConditions.remove(clazz);
+      clazzGlobalLocks.remove(clazz);
     } finally {
       innerLock.unlock();
     }

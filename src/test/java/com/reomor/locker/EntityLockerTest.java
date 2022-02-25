@@ -970,6 +970,102 @@ class EntityLockerTest {
     completeLatch.await();
   }
 
+  @Test
+  @Timeout(value = 3)
+  void globalLock_removeAfterUnlock() throws InterruptedException {
+
+    EntityLockerImpl<String> entityLocker = new EntityLockerImpl<>();
+
+    boolean lockResult = entityLocker.globalLock(TEST_ENTITY_CLASS);
+    assertTrue(lockResult);
+
+    entityLocker.globalUnlock(TEST_ENTITY_CLASS);
+
+    assertNull(entityLocker.jailbreak().clazzNumberOfLockedObjects.get(TEST_ENTITY_CLASS));
+    assertNull(entityLocker.jailbreak().clazzGlobalLocksConditions.get(TEST_ENTITY_CLASS));
+    assertNull(entityLocker.jailbreak().clazzGlobalLocks.get(TEST_ENTITY_CLASS));
+  }
+
+  @Test
+  @Timeout(value = 3)
+  void globalLock_noCleanupAfterUnlock_whenReentrant() throws InterruptedException {
+
+    EntityLockerImpl<String> entityLocker = new EntityLockerImpl<>();
+
+    boolean lockResult = entityLocker.globalLock(TEST_ENTITY_CLASS);
+    assertTrue(lockResult);
+
+    boolean lockResultRepeat = entityLocker.globalLock(TEST_ENTITY_CLASS);
+    assertTrue(lockResultRepeat);
+
+    entityLocker.globalUnlock(TEST_ENTITY_CLASS);
+
+    assertNotNull(entityLocker.jailbreak().clazzNumberOfLockedObjects.get(TEST_ENTITY_CLASS));
+    assertNotNull(entityLocker.jailbreak().clazzGlobalLocksConditions.get(TEST_ENTITY_CLASS));
+    assertNotNull(entityLocker.jailbreak().clazzGlobalLocks.get(TEST_ENTITY_CLASS));
+  }
+
+  @Test
+  @Timeout(value = 3)
+  void globalLockTimeout_waitingEntityUnlock() throws InterruptedException {
+
+    EntityLockerImpl<String> entityLocker = new EntityLockerImpl<>();
+
+    CountDownLatch phase1 = new CountDownLatch(1);
+    CountDownLatch phase2 = new CountDownLatch(1);
+    CountDownLatch completeLatch = new CountDownLatch(2);
+
+    Thread thread1 = new Thread(() -> {
+      try {
+
+        boolean lockResult = entityLocker.globalLock(TEST_ENTITY_CLASS);
+        assertTrue(lockResult);
+
+        phase1.countDown();
+        phase2.await();
+
+        Thread.sleep(100);
+
+        entityLocker.globalUnlock(TEST_ENTITY_CLASS);
+
+        completeLatch.countDown();
+      } catch (InterruptedException ignore) {
+        /* NOP */
+      }
+    });
+
+    //
+    Thread thread2 = new Thread(() -> {
+      try {
+        phase1.await();
+
+        // check that there were no cleanup
+        assertNotNull(entityLocker.jailbreak().clazzNumberOfLockedObjects.get(TEST_ENTITY_CLASS));
+        assertNotNull(entityLocker.jailbreak().clazzGlobalLocksConditions.get(TEST_ENTITY_CLASS));
+        assertNotNull(entityLocker.jailbreak().clazzGlobalLocks.get(TEST_ENTITY_CLASS));
+
+        phase2.countDown();
+
+        // blocked until unlocked in another thread
+        boolean lockResult = entityLocker.globalLock(TEST_ENTITY_CLASS);
+
+        // successfully locked
+        assertTrue(lockResult);
+
+        entityLocker.globalUnlock(TEST_ENTITY_CLASS);
+
+        completeLatch.countDown();
+      } catch (InterruptedException ignore) {
+        /* NOP */
+      }
+    });
+
+    thread1.start();
+    thread2.start();
+
+    completeLatch.await();
+  }
+
   @Data
   @AllArgsConstructor
   private static class Entity<ID> {
