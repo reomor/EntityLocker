@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import manifold.ext.rt.api.Jailbreak;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -248,6 +249,29 @@ class EntityLockerTest {
     assertTrue(timeoutLockResult);
 
     entityLocker.unlock(TEST_ID, TEST_ENTITY_CLASS);
+  }
+
+  @Test
+  @Timeout(value = 3)
+  void globalLockReentrancy() throws InterruptedException {
+
+    EntityLockerImpl<String> entityLocker = new EntityLockerImpl<>();
+
+    EntityLockerImpl<String> jailbreak = entityLocker.jailbreak();
+
+    boolean lockResult = entityLocker.globalLock(TEST_ENTITY_CLASS);
+    assertTrue(lockResult);
+
+    boolean lockResultRepeat = entityLocker.globalLock(TEST_ENTITY_CLASS);
+    assertTrue(lockResultRepeat);
+
+    assertEquals(2, jailbreak.getCurrentClassGlobalLock(TEST_ENTITY_CLASS).getHoldCount());
+    entityLocker.globalUnlock(TEST_ENTITY_CLASS);
+
+    assertEquals(1, jailbreak.getCurrentClassGlobalLock(TEST_ENTITY_CLASS).getHoldCount());
+    entityLocker.globalUnlock(TEST_ENTITY_CLASS);
+
+    assertEquals(0, jailbreak.getCurrentClassGlobalLock(TEST_ENTITY_CLASS).getHoldCount());
   }
 
   @Test
@@ -856,7 +880,6 @@ class EntityLockerTest {
       }
     });
 
-    //
     Thread thread2 = new Thread(() -> {
       try {
         phase1.await();
@@ -868,7 +891,7 @@ class EntityLockerTest {
         long endTime = System.currentTimeMillis();
 
         // waiting is approximately [990,1010] milliseconds
-        assertTrue(Math.abs(endTime - startTime - globalLockWaiting) <= 10);
+        assertTrue(Math.abs(endTime - startTime - globalLockWaiting) <= 30);
 
         // successfully locked
         assertTrue(lockResult);
@@ -928,7 +951,7 @@ class EntityLockerTest {
         long endTime = System.currentTimeMillis();
 
         // waiting is approximately [990,1010] milliseconds
-        assertTrue(Math.abs(endTime - startTime - globalLockWaiting) <= 10);
+        assertTrue(Math.abs(endTime - startTime - globalLockWaiting) <= 30);
 
         // successfully locked
         assertTrue(lockResult);

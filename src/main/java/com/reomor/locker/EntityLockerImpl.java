@@ -66,9 +66,7 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
   @Override
   public void globalUnlock(Class<?> clazz) {
     ReentrantLock classGlobalLock = getCurrentClassGlobalLock(clazz);
-    // oh yeah
-    int holdCount = classGlobalLock.getHoldCount();
-    for (int i = 0; i < holdCount; i++) {
+    if (classGlobalLock.isLocked()) {
       classGlobalLock.unlock();
     }
   }
