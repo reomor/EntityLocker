@@ -1,4 +1,4 @@
-package com.example.almworks.locker;
+package com.reomor.locker;
 
 import java.util.concurrent.TimeUnit;
 

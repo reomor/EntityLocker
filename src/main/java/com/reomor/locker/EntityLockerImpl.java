@@ -1,4 +1,4 @@
-package com.example.almworks.locker;
+package com.reomor.locker;
 
 import lombok.NonNull;
 import org.jetbrains.annotations.NotNull;
