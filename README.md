@@ -35,3 +35,7 @@ Bonus requirements (optional):
 - [ ] `task-07` Implement protection from deadlocks (but not taking into account possible locks outside EntityLocker)
 - [x] `task-08` Implement global lock. Protected code that executes under a global lock must not execute concurrently with any other protected code
 - [x] `task-09` Implement lock escalation. If a single thread has locked too many entities, escalate its lock to be a global lock. 
+
+improvements
+- [ ] `task-10` Global lock reentrancy (number of unlocks must be the same as number of locks)
+- [ ] `task-11` Reduce memory leaks by removing locks
