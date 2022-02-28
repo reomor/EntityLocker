@@ -4,7 +4,6 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import manifold.ext.rt.api.Jailbreak;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -20,6 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 @Slf4j
 class EntityLockerTest {
@@ -72,15 +72,14 @@ class EntityLockerTest {
     assertEquals(1, errors.get());
   }
 
-//  @Test
+  @Test
   @Timeout(value = 3)
-  @RepeatedTest(50)
   void lockUnlockMultiThreaded() throws InterruptedException {
 
     EntityLocker<String> entityLocker = new EntityLockerImpl<>();
     AtomicInteger errors = new AtomicInteger(0);
 
-    int numberOfThreads = 10;
+    int numberOfThreads = 100;
     ExecutorService service = Executors.newFixedThreadPool(numberOfThreads);
 
     CountDownLatch startLatch = new CountDownLatch(1);
@@ -92,7 +91,7 @@ class EntityLockerTest {
         try {
           startLatch.await();
         } catch (InterruptedException ignore) {
-          /* NOP */
+          errors.incrementAndGet();
         }
 
         try {
@@ -107,15 +106,16 @@ class EntityLockerTest {
       });
     }
 
-    assertEquals(0, errors.get());
-
-    // run the process
+    // run the threads
     startLatch.countDown();
 
     // await all thread complete
     waitLatch.await();
+
+    assertEquals(0, errors.get());
   }
 
+//  @Test
   @Timeout(value = 3)
   @RepeatedTest(50)
   void lockOneAfterAnother() throws InterruptedException {
@@ -1007,12 +1007,11 @@ class EntityLockerTest {
 
   @Test
   @Timeout(value = 3)
-  void globalLockTimeout_waitingEntityUnlock() throws InterruptedException {
+  void globalLockTimeout_waitingEntityUnlock_NoCleanUp() throws InterruptedException {
 
-    EntityLockerImpl<String> entityLocker = new EntityLockerImpl<>();
+    EntityLockerImpl<String> entityLocker = spy(new EntityLockerImpl<>());
 
     CountDownLatch phase1 = new CountDownLatch(1);
-    CountDownLatch phase2 = new CountDownLatch(1);
     CountDownLatch completeLatch = new CountDownLatch(2);
 
     Thread thread1 = new Thread(() -> {
@@ -1022,9 +1021,7 @@ class EntityLockerTest {
         assertTrue(lockResult);
 
         phase1.countDown();
-        phase2.await();
-
-        Thread.sleep(100);
+        Thread.sleep(250);
 
         entityLocker.globalUnlock(TEST_ENTITY_CLASS);
 
@@ -1038,13 +1035,6 @@ class EntityLockerTest {
     Thread thread2 = new Thread(() -> {
       try {
         phase1.await();
-
-        // check that there were no cleanup
-        assertNotNull(entityLocker.jailbreak().clazzNumberOfLockedObjects.get(TEST_ENTITY_CLASS));
-        assertNotNull(entityLocker.jailbreak().clazzGlobalLocksConditions.get(TEST_ENTITY_CLASS));
-        assertNotNull(entityLocker.jailbreak().clazzGlobalLocks.get(TEST_ENTITY_CLASS));
-
-        phase2.countDown();
 
         // blocked until unlocked in another thread
         boolean lockResult = entityLocker.globalLock(TEST_ENTITY_CLASS);
@@ -1064,6 +1054,31 @@ class EntityLockerTest {
     thread2.start();
 
     completeLatch.await();
+
+    // only after one unlock
+    verify(entityLocker, times(1)).clearClassGlobalLock(TEST_ENTITY_CLASS);
+  }
+
+  @Test
+  @Timeout(value = 3)
+  void lock_removeAfterUnlock() throws InterruptedException {
+
+    EntityLockerImpl<String> entityLocker = new EntityLockerImpl<>();
+
+    final long threadId = Thread.currentThread().getId();
+
+    boolean lockResult = entityLocker.lock(TEST_ID, TEST_ENTITY_CLASS);
+    assertTrue(lockResult);
+
+    assertNotNull(entityLocker.jailbreak().entitiesLockMaps.get(TEST_ENTITY_CLASS).get(TEST_ID));
+    assertNotNull(entityLocker.jailbreak().threadLockedEntities.get(threadId).get(TEST_ENTITY_CLASS));
+    assertEquals(1, entityLocker.jailbreak().clazzNumberOfLockedObjects.get(TEST_ENTITY_CLASS).get());
+
+    entityLocker.unlock(TEST_ID, TEST_ENTITY_CLASS);
+
+    assertNull(entityLocker.jailbreak().entitiesLockMaps.get(TEST_ENTITY_CLASS).get(TEST_ID));
+    assertTrue(entityLocker.jailbreak().threadLockedEntities.get(threadId).get(TEST_ENTITY_CLASS).isEmpty());
+    assertEquals(0, entityLocker.jailbreak().clazzNumberOfLockedObjects.get(TEST_ENTITY_CLASS).get());
   }
 
   @Data

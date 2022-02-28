@@ -23,6 +23,7 @@
     <slf4j-api.version>1.7.35</slf4j-api.version>
     <logback-classic.version>1.2.10</logback-classic.version>
     <annotations.version>23.0.0</annotations.version>
+    <mockito-junit-jupiter.version>4.3.1</mockito-junit-jupiter.version>
 
     <!-- tests -->
     <junit-jupiter-api.version>5.8.2</junit-jupiter-api.version>
@@ -31,6 +32,7 @@
     <!-- plugins -->
     <maven-compiler-plugin.version>3.8.0</maven-compiler-plugin.version>
     <maven-surefire-plugin.version>2.22.2</maven-surefire-plugin.version>
+    <jacoco-maven-plugin.version>0.8.7</jacoco-maven-plugin.version>
   </properties>
 
   <dependencies>
@@ -78,6 +80,13 @@
     </dependency>
 
     <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-junit-jupiter</artifactId>
+      <version>${mockito-junit-jupiter.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
       <groupId>systems.manifold</groupId>
       <artifactId>manifold-ext</artifactId>
       <version>${manifold.version}</version>
@@ -118,7 +127,7 @@
       <plugin>
         <groupId>org.jacoco</groupId>
         <artifactId>jacoco-maven-plugin</artifactId>
-        <version>0.8.7</version>
+        <version>${jacoco-maven-plugin.version}</version>
         <executions>
           <execution>
             <goals>

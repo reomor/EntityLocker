@@ -139,28 +139,47 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
 
   @Override
   public void unlock(@NonNull ID entityId, Class<?> clazz) {
-    unlockEntity(entityId, clazz);
+
+    try {
+      innerLock.lock();
+
+      ReentrantLock currentLock = getCurrentLock(entityId, clazz);
+
+      if (currentLock != null && currentLock.isLocked()) {
+
+        // attempt to release the lock:
+        // current thread is the owner and everything is ok
+        // current thread is not the owner and IllegalArgumentException is raised
+
+        if (currentLock.getHoldCount() == 1 && !currentLock.hasQueuedThreads()) {
+          Map<ID, ReentrantLock> lockMap = entitiesLockMaps.get(clazz);
+          if (lockMap != null) {
+            lockMap.remove(entityId);
+          }
+        }
+
+        currentLock.unlock();
+      }
+
+      long threadId = Thread.currentThread().getId();
+      Map<Class<?>, Set<ID>> classIDMap = threadLockedEntities.getOrDefault(threadId, new HashMap<>());
+      Set<ID> threadClassEntities = classIDMap.get(clazz);
+
+      if (threadClassEntities != null) {
+        threadClassEntities.remove(entityId);
+      }
+
+      getNumberOfBlockedObjects(clazz).decrementAndGet();
+    } finally {
+      innerLock.unlock();
+    }
+
+    wakeUpClassGlobalLock(clazz);
   }
 
   @ThreadSafeIMHO
   private void postLockActions(Class<?> clazz) {
     getNumberOfBlockedObjects(clazz).incrementAndGet();
-  }
-
-  @ThreadSafeIMHO
-  private void postUnlockActions(Class<?> clazz) {
-    // in order to escape deadlock locks are taken from global to inner
-    ReentrantLock globalLock = getOrCreateClassGlobalLock(clazz);
-    // lock because of signal
-    globalLock.lock();
-    innerLock.lock();
-    try {
-      getNumberOfBlockedObjects(clazz).decrementAndGet();
-      getClassGlobalLockCondition(clazz).signalAll();
-    } finally {
-      innerLock.unlock();
-      globalLock.unlock();
-    }
   }
 
   @ThreadSafeIMHO
@@ -226,7 +245,7 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
   }
 
   @ThreadSafeIMHO
-  private void clearClassGlobalLock(Class<?> clazz) {
+  protected void clearClassGlobalLock(Class<?> clazz) {
     innerLock.lock();
     try {
       clazzNumberOfLockedObjects.remove(clazz);
@@ -277,22 +296,15 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
     }
   }
 
-  @ThreadSafeIMHO
-  private void unlockEntity(@NonNull ID entityId, Class<?> clazz) {
-
-    ReentrantLock currentLock = getCurrentLock(entityId, clazz);
-
-    if (currentLock != null && currentLock.isLocked()) {
-      // attempt to release the lock:
-      // current thread is the owner and everything is ok
-      // current thread is not the owner and IllegalArgumentException is raised
-      currentLock.unlock();
+  private void wakeUpClassGlobalLock(Class<?> clazz) {
+    // wake up
+    ReentrantLock classGlobalLock = getOrCreateClassGlobalLock(clazz);
+    classGlobalLock.lock();
+    try {
+      getClassGlobalLockCondition(clazz).signalAll();
+    } finally {
+      classGlobalLock.unlock();
     }
-
-    unbindThreadWithEntity(entityId, clazz);
-
-    // success - reduce number of locked objects
-    postUnlockActions(clazz);
   }
 
   @ThreadSafeIMHO
@@ -304,19 +316,6 @@ public class EntityLockerImpl<ID> implements EntityLocker<ID> {
       Set<ID> threadClassEntities = classIDMap.computeIfAbsent(clazz, ignore -> new HashSet<>());
       threadClassEntities.add(entityId);
       clazzNumberOfLockedObjects.computeIfAbsent(clazz, ignore -> new AtomicInteger(0));
-    } finally {
-      innerLock.unlock();
-    }
-  }
-
-  @ThreadSafeIMHO
-  private void unbindThreadWithEntity(ID entityId, Class<?> clazz) {
-    innerLock.lock();
-    try {
-      long threadId = Thread.currentThread().getId();
-      Map<Class<?>, Set<ID>> classIDMap = threadLockedEntities.getOrDefault(threadId, new HashMap<>());
-      Set<ID> threadClassEntities = classIDMap.computeIfAbsent(clazz, ignore -> new HashSet<>());
-      threadClassEntities.remove(entityId);
     } finally {
       innerLock.unlock();
     }
