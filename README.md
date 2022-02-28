@@ -37,5 +37,5 @@ Bonus requirements (optional):
 - [x] `task-09` Implement lock escalation. If a single thread has locked too many entities, escalate its lock to be a global lock. 
 
 improvements
-- [ ] `task-10` Global lock reentrancy (number of unlocks must be the same as number of locks)
-- [ ] `task-11` Reduce memory leaks by removing locks
+- [x] `task-10` Global lock reentrancy (number of unlocks must be the same as number of locks)
+- [x] `task-11` Reduce memory leaks by removing locks
